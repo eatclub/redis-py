@@ -1,4 +1,6 @@
 from __future__ import with_statement
+
+import importlib
 from distutils.version import StrictVersion
 from itertools import chain
 from select import select
@@ -7,6 +9,8 @@ import socket
 import sys
 import threading
 import warnings
+
+from . import get_config
 
 try:
     import ssl
@@ -388,27 +392,34 @@ class Connection(object):
     "Manages TCP communication to and from a Redis server"
     description_format = "Connection<host=%(host)s,port=%(port)s,db=%(db)s>"
 
-    def __init__(self, host='localhost', port=6379, db=0, password=None,
-                 socket_timeout=None, socket_connect_timeout=None,
-                 socket_keepalive=False, socket_keepalive_options=None,
-                 retry_on_timeout=False, encoding='utf-8',
-                 encoding_errors='strict', decode_responses=False,
-                 parser_class=DefaultParser, socket_read_size=65536):
+    def __init__(self, **kwargs):
+
         self.pid = os.getpid()
-        self.host = host
-        self.port = int(port)
-        self.db = db
-        self.password = password
-        self.socket_timeout = socket_timeout
-        self.socket_connect_timeout = socket_connect_timeout or socket_timeout
-        self.socket_keepalive = socket_keepalive
-        self.socket_keepalive_options = socket_keepalive_options or {}
-        self.retry_on_timeout = retry_on_timeout
-        self.encoding = encoding
-        self.encoding_errors = encoding_errors
-        self.decode_responses = decode_responses
+        self.host = get_config('CONNECTION', 'HOST', kwargs)
+        self.port = int(get_config('CONNECTION', 'PORT', kwargs))
+        self.db = get_config('CONNECTION', 'DB', kwargs)
+        self.password = get_config('CONNECTION', 'PASSWORD', kwargs)
+        self.socket_timeout = get_config('CONNECTION', 'SOCKET_TIMEOUT', kwargs)
+        self.socket_connect_timeout = get_config('CONNECTION', 'SOCKET_CONNECT_TIMEOUT', kwargs) or self.socket_timeout
+        self.socket_keepalive = get_config('CONNECTION', 'SOCKET_KEEPALIVE', kwargs)
+        self.socket_keepalive_options = get_config('CONNECTION', 'SOCKET_KEEPALIVE_OPTIONS', kwargs) or {}
+        self.retry_on_timeout = get_config('CONNECTION', 'RETRY_ON_TIMEOUT', kwargs)
+        self.encoding =  get_config('CONNECTION', 'ENCODING', kwargs)
+        self.encoding_errors =  get_config('CONNECTION', 'ENCODING_ERRORS', kwargs)
+        self.decode_responses =  get_config('CONNECTION', 'DECODE_RESPONSES', kwargs)
         self._sock = None
+
+        parser_class = get_config('CONNECTION', 'PARSER_CLASS', kwargs)
+        if parser_class is None:
+            parser_class = DefaultParser
+        elif isinstance(parser_class, basestring):
+            module_name, class_name = parser_class.split(".")
+            somemodule = importlib.import_module(module_name)
+            parser_class = getattr(somemodule, class_name)
+
+        socket_read_size = get_config('CONNECTION', 'SOCKET_READ_SIZE', kwargs)
         self._parser = parser_class(socket_read_size=socket_read_size)
+
         self._description_args = {
             'host': self.host,
             'port': self.port,
