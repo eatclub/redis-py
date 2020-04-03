@@ -1,4 +1,6 @@
 from __future__ import unicode_literals
+
+import importlib
 from distutils.version import StrictVersion
 from itertools import chain
 from time import time
@@ -9,6 +11,8 @@ import socket
 import sys
 import threading
 import warnings
+
+from . import get_config
 
 from redis._compat import (xrange, imap, byte_to_chr, unicode, long,
                            nativestr, basestring, iteritems,
@@ -493,30 +497,36 @@ else:
 class Connection(object):
     "Manages TCP communication to and from a Redis server"
 
-    def __init__(self, host='localhost', port=6379, db=0, password=None,
-                 socket_timeout=None, socket_connect_timeout=None,
-                 socket_keepalive=False, socket_keepalive_options=None,
-                 socket_type=0, retry_on_timeout=False, encoding='utf-8',
-                 encoding_errors='strict', decode_responses=False,
-                 parser_class=DefaultParser, socket_read_size=65536,
-                 health_check_interval=0, client_name=None, username=None):
+    def __init__(self, **kwargs):
         self.pid = os.getpid()
-        self.host = host
-        self.port = int(port)
-        self.db = db
-        self.username = username
-        self.client_name = client_name
-        self.password = password
-        self.socket_timeout = socket_timeout
-        self.socket_connect_timeout = socket_connect_timeout or socket_timeout
-        self.socket_keepalive = socket_keepalive
-        self.socket_keepalive_options = socket_keepalive_options or {}
-        self.socket_type = socket_type
-        self.retry_on_timeout = retry_on_timeout
-        self.health_check_interval = health_check_interval
-        self.next_health_check = 0
-        self.encoder = Encoder(encoding, encoding_errors, decode_responses)
+        self.host = get_config('CONNECTION', 'HOST', kwargs)
+        self.port = int(get_config('CONNECTION', 'PORT', kwargs))
+        self.db = get_config('CONNECTION', 'DB', kwargs)
+        self.username = get_config('CONNECTION', 'USERNAME', kwargs)
+        self.client_name = get_config('CONNECTION', 'CLIENT_NAME', kwargs)
+        self.password = get_config('CONNECTION', 'PASSWORD', kwargs)
+        self.socket_timeout = get_config('CONNECTION', 'SOCKET_TIMEOUT', kwargs)
+        self.socket_connect_timeout = get_config('CONNECTION', 'SOCKET_CONNECT_TIMEOUT', kwargs) or self.socket_timeout
+        self.socket_keepalive = get_config('CONNECTION', 'SOCKET_KEEPALIVE', kwargs)
+        self.socket_keepalive_options = get_config('CONNECTION', 'SOCKET_KEEPALIVE_OPTIONS', kwargs) or {}
+        self.socket_type = get_config('CONNECTION', 'SOCKET_TYPE', kwargs)
+        self.retry_on_timeout = get_config('CONNECTION', 'RETRY_ON_TIMEOUT', kwargs)
+        self.health_check_interval = get_config('CONNECTION', 'HELTH_CHECK_INTERVAL', kwargs)
+        self.next_health_check = get_config('CONNECTION', 'NEXT_HELTH_CHECK', kwargs)
+        self.encoding =  get_config('CONNECTION', 'ENCODING', kwargs)
+        self.encoding_errors =  get_config('CONNECTION', 'ENCODING_ERRORS', kwargs)
+        self.decode_responses =  get_config('CONNECTION', 'DECODE_RESPONSES', kwargs)
+        self.encoder = Encoder(self.encoding, self.encoding_errors, self.decode_responses)
         self._sock = None
+        parser_class = get_config('CONNECTION', 'PARSER_CLASS', kwargs)
+        if parser_class is None:
+            parser_class = DefaultParser
+        elif isinstance(parser_class, basestring):
+            module_name, class_name = parser_class.split(".")
+            somemodule = importlib.import_module(module_name)
+            parser_class = getattr(somemodule, class_name)
+
+        socket_read_size = get_config('CONNECTION', 'SOCKET_READ_SIZE', kwargs)
         self._parser = parser_class(socket_read_size=socket_read_size)
         self._connect_callbacks = []
         self._buffer_cutoff = 6000
